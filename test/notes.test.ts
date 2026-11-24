@@ -30,6 +30,12 @@ describe('classify', () => {
   it('drops the app name from scope prefixes but keeps the rest', () => {
     assert.equal(classify('ShellDeck: dark mode', 'ShellDeck')?.text, 'Dark mode');
     assert.equal(classify('ShellDeck icon: terminal card stack', 'ShellDeck')?.text, 'Icon: terminal card stack');
+    assert.equal(classify('Settings: Dark mode', 'ShellDeck')?.text, 'Settings: dark mode');
+  });
+
+  it('keeps acronyms intact after a scope prefix', () => {
+    assert.equal(classify('Store readiness: EAS-managed build numbers')?.text, 'Store readiness: EAS-managed build numbers');
+    assert.equal(classify('Widgets: iOS home screen widget')?.text, 'Widgets: iOS home screen widget');
   });
 
   it('skips merges and blanks', () => {

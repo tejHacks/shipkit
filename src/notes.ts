@@ -62,7 +62,9 @@ export function classify(subject: string, appName?: string): Change | null {
     const app = appName?.toLowerCase();
     const scope = scoped[1]!.trim();
     const rest = app && scope.toLowerCase().startsWith(app) ? scope.slice(app.length).trim() : scope;
-    if (rest && !/^my\b/i.test(rest)) text = `${tidy(rest)}: ${body.charAt(0).toLowerCase()}${body.slice(1)}`;
+    // Lower-case the first letter after the prefix, but leave acronyms ("EAS", "iOS") alone.
+    const lead = /^[A-Z][a-z]/.test(body) ? body.charAt(0).toLowerCase() + body.slice(1) : body;
+    if (rest && !/^my\b/i.test(rest)) text = `${tidy(rest)}: ${lead}`;
   }
 
   if (INTERNAL_START.test(body) || INTERNAL_TOPIC.test(s)) return { kind: 'internal', text: tidy(text) };
