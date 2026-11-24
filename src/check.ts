@@ -22,12 +22,16 @@ export interface ImageInfo {
   width: number;
   height: number;
   hasAlpha: boolean;
+  /** Pixels that are not fully opaque. 0 when the alpha channel exists but is unused. */
+  transparentPixels: number;
 }
 
 export interface Facts {
   /** Image metadata keyed by the path as written in the config. null = file missing. */
   images: Record<string, ImageInfo | null>;
   lastTag: { name: string; commitsSince: number } | null;
+  /** An ios/ folder is checked in, so Expo prebuild will not regenerate (and flatten) the icon. */
+  nativeIos: boolean;
 }
 
 /** Packages whose iOS permission prompts need a purpose string, and the Info.plist keys they use. */
@@ -98,7 +102,12 @@ export function runChecks(p: Project, facts: Facts): Finding[] {
     if (info === null) add('error', 'icon', `${label} ${path} does not exist.`);
     else if (info) {
       if (info.width !== 1024 || info.height !== 1024) add('error', 'icon', `${label} is ${info.width}×${info.height}.`, 'Stores need a 1024×1024 PNG.');
-      else if (info.hasAlpha) add('warn', 'icon-alpha', `${label} has an alpha channel.`, 'App Store Connect rejects transparent app icons. Export it without transparency.');
+      else if (info.hasAlpha && facts.nativeIos)
+        // Bare/native project: the PNG goes into the asset catalog as-is, and Apple rejects any alpha channel (ITMS-90717).
+        add('error', 'icon-alpha', `${label} has an alpha channel and this project has a native ios/ folder.`, 'App Store Connect rejects icons with an alpha channel (ITMS-90717). Export it without one.');
+      else if (info.transparentPixels > 0)
+        // Expo prebuild flattens the iOS icon onto white, so transparent areas turn into a white box.
+        add('warn', 'icon-alpha', `${label} has ${info.transparentPixels.toLocaleString('en')} transparent pixel(s).`, 'Expo fills them with white when it builds the iOS icon. Export the icon with its real background colour.');
       else add('ok', 'icon', `${label} 1024×1024, opaque`);
     }
   }
@@ -159,7 +168,12 @@ export async function gatherFacts(p: Project): Promise<Facts> {
       continue;
     }
     const m = await sharp(abs).metadata();
-    images[rel] = { width: m.width ?? 0, height: m.height ?? 0, hasAlpha: Boolean(m.hasAlpha) };
+    let transparentPixels = 0;
+    if (m.hasAlpha) {
+      const alpha = await sharp(abs).extractChannel('alpha').raw().toBuffer();
+      for (const a of alpha) if (a < 255) transparentPixels++;
+    }
+    images[rel] = { width: m.width ?? 0, height: m.height ?? 0, hasAlpha: Boolean(m.hasAlpha), transparentPixels };
   }
 
   let lastTag: Facts['lastTag'] = null;
@@ -169,5 +183,7 @@ export async function gatherFacts(p: Project): Promise<Facts> {
     const count = await run('git', ['rev-list', '--count', `${name}..HEAD`], p.root);
     lastTag = { name, commitsSince: Number(count.stdout.trim()) || 0 };
   }
-  return { images, lastTag };
+  const tracked = await run('git', ['ls-files', '--', 'ios/Podfile'], p.root).catch(() => null);
+  const nativeIos = tracked && tracked.code === 0 ? tracked.stdout.trim() !== '' : existsSync(join(p.root, 'ios', 'Podfile'));
+  return { images, lastTag, nativeIos };
 }

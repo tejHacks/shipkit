@@ -4,7 +4,7 @@ import { describe, it } from 'node:test';
 import { runChecks, type Facts } from '../src/check.ts';
 import type { ExpoConfig, Project } from '../src/project.ts';
 
-const goodIcon = { width: 1024, height: 1024, hasAlpha: false };
+const goodIcon = { width: 1024, height: 1024, hasAlpha: false, transparentPixels: 0 };
 
 function project(config: Partial<ExpoConfig> = {}, extra: Partial<Project> = {}): Project {
   return {
@@ -24,7 +24,7 @@ function project(config: Partial<ExpoConfig> = {}, extra: Partial<Project> = {})
     ...extra,
   };
 }
-const facts = (f: Partial<Facts> = {}): Facts => ({ images: { './icon.png': goodIcon, './fg.png': goodIcon }, lastTag: null, ...f });
+const facts = (f: Partial<Facts> = {}): Facts => ({ images: { './icon.png': goodIcon, './fg.png': goodIcon }, lastTag: null, nativeIos: false, ...f });
 const ids = (p: Project, f = facts()) => runChecks(p, f).filter((x) => x.level !== 'ok').map((x) => x.id);
 
 describe('runChecks', () => {
@@ -42,9 +42,19 @@ describe('runChecks', () => {
   });
 
   it('checks icon size, existence and transparency', () => {
-    assert.ok(ids(project(), facts({ images: { './icon.png': { width: 512, height: 512, hasAlpha: false }, './fg.png': goodIcon } })).includes('icon'));
+    assert.ok(ids(project(), facts({ images: { './icon.png': { ...goodIcon, width: 512, height: 512 }, './fg.png': goodIcon } })).includes('icon'));
     assert.ok(ids(project(), facts({ images: { './icon.png': null, './fg.png': goodIcon } })).includes('icon'));
-    assert.ok(ids(project(), facts({ images: { './icon.png': { ...goodIcon, hasAlpha: true }, './fg.png': goodIcon } })).includes('icon-alpha'));
+  });
+
+  it('only flags icon transparency that will actually cause a problem', () => {
+    const icon = (o: Partial<typeof goodIcon>) => ({ images: { './icon.png': { ...goodIcon, ...o }, './fg.png': goodIcon } });
+    const alphaFinding = (f: Facts) => runChecks(project(), f).find((x) => x.id === 'icon-alpha');
+    // Alpha channel but every pixel opaque, Expo-managed: prebuild flattens it, nothing to do.
+    assert.equal(alphaFinding(facts(icon({ hasAlpha: true }))), undefined);
+    // Real transparent pixels, Expo-managed: they become white on iOS.
+    assert.equal(alphaFinding(facts(icon({ hasAlpha: true, transparentPixels: 500 })))?.level, 'warn');
+    // Checked-in native ios/ folder: any alpha channel is rejected by App Store Connect.
+    assert.equal(alphaFinding(facts({ ...icon({ hasAlpha: true }), nativeIos: true }))?.level, 'error');
   });
 
   it('warns when build numbers will collide', () => {
