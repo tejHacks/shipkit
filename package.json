@@ -1,0 +1,40 @@
+{
+  "name": "shipkit-cli",
+  "version": "0.1.0",
+  "description": "Ship Expo apps to the stores without the busywork: readiness checks, release notes from git, framed store screenshots and an EAS build dashboard.",
+  "type": "module",
+  "bin": {
+    "shipkit": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"test/**/*.test.ts\"",
+    "dev": "node src/cli.ts",
+    "prepublishOnly": "npm run typecheck && npm test && npm run build"
+  },
+  "keywords": [
+    "expo",
+    "eas",
+    "react-native",
+    "app-store",
+    "play-store",
+    "release-notes",
+    "screenshots",
+    "cli"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "sharp": "^0.35.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2"
+  }
+}
